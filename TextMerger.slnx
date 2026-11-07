@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="TextMerger.Tests/TextMerger.Tests.csproj" />
+  <Project Path="TextMerger/TextMerger.csproj" />
+</Solution>
