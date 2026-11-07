@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using Terminal.Gui.App;
+using Terminal.Gui.Configuration;
+using Terminal.Gui.Drawing;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -13,13 +15,23 @@ namespace TextMerger.UI;
 /// </summary>
 public sealed class MainWindow : Window
 {
+    public const string DefaultThemeName = "Dark";
+
+    public static IReadOnlyList<string> AvailableThemes { get; } = BuildThemeList();
+
     private readonly IApplication _app;
     private readonly IFileScanner _fileScanner;
     private readonly ITextMergeService _mergeService;
 
+    private readonly FrameView _sourceFrame;
+    private readonly FrameView _filesFrame;
+    private readonly FrameView _optionsFrame;
+    private readonly FrameView _bottomFrame;
+
     private readonly TextField _folderPathField;
     private readonly TextField _patternField;
     private readonly CheckBox _subfoldersCheckBox;
+    private readonly OptionSelector _themeSelector;
 
     private readonly ListView _fileListView;
     private readonly Label _fileSummaryLabel;
@@ -51,19 +63,22 @@ public sealed class MainWindow : Window
         Title = $"テキストファイル結合ツール (TextMerger) - 終了: {quitKey}";
         Width = Dim.Fill();
         Height = Dim.Fill();
+        BorderStyle = LineStyle.Rounded;
+        SchemeName = SchemeManager.SchemesToSchemeName(Schemes.Base);
 
         string initialFolder = Environment.CurrentDirectory;
 
         // =========================================================
-        // 1. 上部：検索・フィルタ設定フレーム
+        // 1. 上部：検索・フィルタ・テーマ設定フレーム
         // =========================================================
-        var sourceFrame = new FrameView
+        _sourceFrame = new FrameView
         {
-            Title = "1. 対象フォルダ・検索条件",
+            Title = "1. 対象フォルダ・検索条件・テーマ",
             X = 0,
             Y = 0,
             Width = Dim.Fill(),
-            Height = 6
+            Height = 7,
+            BorderStyle = LineStyle.Rounded
         };
 
         var folderLabel = new Label
@@ -125,25 +140,54 @@ public sealed class MainWindow : Window
         };
         _subfoldersCheckBox.ValueChanged += (_, _) => RefreshFileList();
 
-        sourceFrame.Add(
+        var themeLabel = new Label
+        {
+            Text = "UIテーマ:",
+            X = 1,
+            Y = 4
+        };
+
+        _themeSelector = new OptionSelector
+        {
+            X = 16,
+            Y = 4,
+            Orientation = Orientation.Horizontal,
+            HorizontalSpace = 2,
+            Labels = AvailableThemes.ToArray(),
+            Value = 0
+        };
+        _themeSelector.ValueChanged += (_, e) =>
+        {
+            if (e.NewValue.HasValue &&
+                e.NewValue.Value >= 0 &&
+                e.NewValue.Value < AvailableThemes.Count)
+            {
+                ApplyTheme(AvailableThemes[e.NewValue.Value]);
+            }
+        };
+
+        _sourceFrame.Add(
             folderLabel,
             _folderPathField,
             browseFolderButton,
             scanButton,
             patternLabel,
             _patternField,
-            _subfoldersCheckBox);
+            _subfoldersCheckBox,
+            themeLabel,
+            _themeSelector);
 
         // =========================================================
         // 2. 中部左：ファイル一覧＆個別選択フレーム
         // =========================================================
-        var filesFrame = new FrameView
+        _filesFrame = new FrameView
         {
             Title = "2. 結合対象ファイル一覧 (Spaceキーまたはクリックで選択切替)",
             X = 0,
-            Y = Pos.Bottom(sourceFrame),
+            Y = Pos.Bottom(_sourceFrame),
             Width = Dim.Percent(55),
-            Height = Dim.Fill(7)
+            Height = Dim.Fill(7),
+            BorderStyle = LineStyle.Rounded
         };
 
         _fileListView = new ListView
@@ -163,7 +207,8 @@ public sealed class MainWindow : Window
             Text = "対象ファイル: 0 件",
             X = 1,
             Y = Pos.AnchorEnd(2),
-            Width = Dim.Fill(1)
+            Width = Dim.Fill(1),
+            SchemeName = SchemeManager.SchemesToSchemeName(Schemes.Accent)
         };
 
         var selectAllButton = new Button
@@ -214,7 +259,7 @@ public sealed class MainWindow : Window
             MoveSelectedFile(1);
         };
 
-        filesFrame.Add(
+        _filesFrame.Add(
             _fileListView,
             _fileSummaryLabel,
             selectAllButton,
@@ -225,13 +270,14 @@ public sealed class MainWindow : Window
         // =========================================================
         // 3. 中部右：ヘッダ設定・文字コード設定フレーム
         // =========================================================
-        var optionsFrame = new FrameView
+        _optionsFrame = new FrameView
         {
             Title = "3. ヘッダ・文字コード設定",
-            X = Pos.Right(filesFrame),
-            Y = Pos.Bottom(sourceFrame),
+            X = Pos.Right(_filesFrame),
+            Y = Pos.Bottom(_sourceFrame),
             Width = Dim.Fill(),
-            Height = Dim.Fill(7)
+            Height = Dim.Fill(7),
+            BorderStyle = LineStyle.Rounded
         };
 
         _skipHeaderCheckBox = new CheckBox
@@ -292,7 +338,7 @@ public sealed class MainWindow : Window
             Value = 0
         };
 
-        optionsFrame.Add(
+        _optionsFrame.Add(
             _skipHeaderCheckBox,
             headerCountLabel,
             _headerCountField,
@@ -304,13 +350,14 @@ public sealed class MainWindow : Window
         // =========================================================
         // 4. 下部：出力先設定・進捗・実行フレーム
         // =========================================================
-        var bottomFrame = new FrameView
+        _bottomFrame = new FrameView
         {
             Title = "4. 出力先と実行",
             X = 0,
             Y = Pos.AnchorEnd(7),
             Width = Dim.Fill(),
-            Height = 7
+            Height = 7,
+            BorderStyle = LineStyle.Rounded
         };
 
         var outputLabel = new Label
@@ -342,7 +389,8 @@ public sealed class MainWindow : Window
             Y = 2,
             Width = Dim.Fill(2),
             Height = 1,
-            Fraction = 0f
+            Fraction = 0f,
+            SchemeName = SchemeManager.SchemesToSchemeName(Schemes.Accent)
         };
 
         _statusLabel = new Label
@@ -375,7 +423,7 @@ public sealed class MainWindow : Window
             _app.RequestStop();
         };
 
-        bottomFrame.Add(
+        _bottomFrame.Add(
             outputLabel,
             _outputPathField,
             browseOutputButton,
@@ -384,9 +432,86 @@ public sealed class MainWindow : Window
             _mergeButton,
             quitButton);
 
-        Add(sourceFrame, filesFrame, optionsFrame, bottomFrame);
+        Add(_sourceFrame, _filesFrame, _optionsFrame, _bottomFrame);
 
+        ApplyTheme(AvailableThemes[0]);
         RefreshFileList();
+    }
+
+    /// <summary>
+    /// 指定した Terminal.Gui 組み込みテーマを適用し、丸角枠線スタイルを維持して再描画します。
+    /// </summary>
+    public void ApplyTheme(string themeName)
+    {
+        if (string.IsNullOrWhiteSpace(themeName))
+        {
+            return;
+        }
+
+        ThemeManager.Theme = themeName;
+
+        // テーマ切替時にも丸角枠線スタイル (LineStyle.Rounded) を維持
+        WindowSettings.Current = WindowSettings.Current with { DefaultBorderStyle = LineStyle.Rounded };
+        FrameViewSettings.Current = FrameViewSettings.Current with { DefaultBorderStyle = LineStyle.Rounded };
+        DialogSettings.Current = DialogSettings.Current with { DefaultBorderStyle = LineStyle.Rounded };
+        MessageBoxSettings.Current = MessageBoxSettings.Current with { DefaultBorderStyle = LineStyle.Rounded };
+
+        BorderStyle = LineStyle.Rounded;
+        _sourceFrame.BorderStyle = LineStyle.Rounded;
+        _filesFrame.BorderStyle = LineStyle.Rounded;
+        _optionsFrame.BorderStyle = LineStyle.Rounded;
+        _bottomFrame.BorderStyle = LineStyle.Rounded;
+
+        int themeIdx = -1;
+        for (int i = 0; i < AvailableThemes.Count; i++)
+        {
+            if (string.Equals(AvailableThemes[i], themeName, StringComparison.OrdinalIgnoreCase))
+            {
+                themeIdx = i;
+                break;
+            }
+        }
+
+        if (themeIdx >= 0 && _themeSelector.Value != themeIdx)
+        {
+            _themeSelector.Value = themeIdx;
+        }
+
+        SetNeedsDraw();
+        _app.LayoutAndDraw(true);
+    }
+
+    private static IReadOnlyList<string> BuildThemeList()
+    {
+        IReadOnlyList<string> builtIn = ThemeManager.GetThemeNames();
+        string[] preferredOrder =
+        [
+            DefaultThemeName,
+            "Light",
+            "Default",
+            "TurboPascal 5",
+            "Anders",
+            "Green Phosphor"
+        ];
+
+        var list = new List<string>();
+        foreach (string name in preferredOrder)
+        {
+            if (builtIn.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                list.Add(name);
+            }
+        }
+
+        foreach (string name in builtIn)
+        {
+            if (!list.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                list.Add(name);
+            }
+        }
+
+        return list.Count > 0 ? list : [DefaultThemeName];
     }
 
     private void OnBrowseFolderAccepted(object? sender, CommandEventArgs e)
@@ -398,6 +523,7 @@ public sealed class MainWindow : Window
             Title = "対象フォルダを選択",
             OpenMode = OpenMode.Directory,
             AllowsMultipleSelection = false,
+            BorderStyle = LineStyle.Rounded,
             Path = Directory.Exists(_folderPathField.Text)
                 ? _folderPathField.Text
                 : Environment.CurrentDirectory
@@ -428,6 +554,7 @@ public sealed class MainWindow : Window
         using var dialog = new SaveDialog
         {
             Title = "結合ファイルの保存先を選択",
+            BorderStyle = LineStyle.Rounded,
             Path = !string.IsNullOrWhiteSpace(_outputPathField.Text)
                 ? _outputPathField.Text
                 : Path.Combine(Environment.CurrentDirectory, "merged_output.txt")
