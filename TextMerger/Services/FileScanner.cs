@@ -14,10 +14,7 @@ public sealed class FileScanner : IFileScanner
         _encodingDetector = encodingDetector ?? EncodingDetector.Default;
     }
 
-    /// <summary>
-    /// 指定されたディレクトリからパターンに一致するファイル一覧を取得します。
-    /// パターンはセミコロン (;) またはカンマ (,) 区切りで複数指定可能です（例: "*.txt;*.csv"）。
-    /// </summary>
+    /// <inheritdoc />
     public IReadOnlyList<FileItem> ScanFiles(
         string directoryPath,
         string searchPatterns,
@@ -25,9 +22,7 @@ public sealed class FileScanner : IFileScanner
         string? excludeFilePath = null) =>
         ScanFilesWithWarnings(directoryPath, searchPatterns, includeSubdirectories, excludeFilePath).Files;
 
-    /// <summary>
-    /// 指定されたディレクトリからファイル一覧を取得し、アクセス権限エラーや不正パターンの警告も返します。
-    /// </summary>
+    /// <inheritdoc />
     public FileScanResult ScanFilesWithWarnings(
         string directoryPath,
         string searchPatterns,
@@ -102,6 +97,10 @@ public sealed class FileScanner : IFileScanner
         return new FileScanResult(files, warnings);
     }
 
+    /// <summary>
+    /// セミコロン (;) またはカンマ (,) 区切りの検索パターン文字列を配列に分割します。
+    /// 空欄または空白のみの場合は全ファイル対象 ("*.*") を返します。
+    /// </summary>
     public static string[] ParsePatterns(string? rawPattern)
     {
         if (string.IsNullOrWhiteSpace(rawPattern))

@@ -94,6 +94,10 @@ public sealed class MergeOptionsView : FrameView
 
     public bool SkipHeaderOnSubsequentFiles => _skipHeaderCheckBox.Value == CheckState.Checked;
 
+    /// <summary>
+    /// スキップするヘッダ行数の入力値を検証して取得します。
+    /// ヘッダスキップが無効（チェックOFF）の場合は入力値に関わらず 0 行として true を返します。
+    /// </summary>
     public bool TryGetHeaderLineCount(out int headerLineCount)
     {
         if (!SkipHeaderOnSubsequentFiles)

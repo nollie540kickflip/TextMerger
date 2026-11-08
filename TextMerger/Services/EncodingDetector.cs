@@ -9,8 +9,12 @@ public sealed class EncodingDetector : IEncodingDetector
 {
     private const int MaxSampleBytes = 65536;
 
+    /// <summary>
+    /// デフォルトのシングルトンインスタンス
+    /// </summary>
     public static EncodingDetector Default { get; } = new();
 
+    /// <inheritdoc />
     EncodingType IEncodingDetector.DetectFileEncoding(string filePath) =>
         DetectFileEncoding(filePath);
 

@@ -20,6 +20,7 @@ public sealed class TextMergeService : ITextMergeService
         _encodingDetector = encodingDetector ?? EncodingDetector.Default;
     }
 
+    /// <inheritdoc />
     public Task<MergeResult> MergeFilesAsync(
         IReadOnlyList<string> inputFiles,
         MergeOptions options,
@@ -41,6 +42,7 @@ public sealed class TextMergeService : ITextMergeService
         return MergeFilesAsync(items, options, progress, cancellationToken);
     }
 
+    /// <inheritdoc />
     public async Task<MergeResult> MergeFilesAsync(
         IReadOnlyList<FileItem> inputItems,
         MergeOptions options,

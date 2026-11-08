@@ -112,6 +112,9 @@ public sealed class FileListPanelView : FrameView
         RebindListViewSource();
     }
 
+    /// <summary>
+    /// ListView 上の最新のチェック（マーク）状態をモデルへ同期した上で、選択されているファイル一覧を返します。
+    /// </summary>
     public IReadOnlyList<FileItem> GetSelectedFiles()
     {
         SyncMarksFromListView();

@@ -6,6 +6,9 @@ using TextMerger.UI;
 
 namespace TextMerger;
 
+/// <summary>
+/// アプリケーションのエントリーポイント（TUIモードおよび --cli ヘッドレスモードの起動）
+/// </summary>
 public static class Program
 {
     public static async Task<int> Main(string[] args)
