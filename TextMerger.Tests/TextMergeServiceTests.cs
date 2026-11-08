@@ -423,6 +423,73 @@ public sealed class TextMergeServiceTests : IDisposable
         Assert.NotEmpty(scanResult.Warnings);
     }
 
+    [Fact]
+    public async Task MergeFilesAsync_LargeLinesSpanningMultipleChunks_StreamsWithoutDataLoss()
+    {
+        // 64KB (65536 chars) のチャンクサイズを大きく超える1行データ (150,000文字)
+        string giantHeader = "HEADER_" + new string('H', 150_000);
+        string giantRow1 = "ROW1_" + new string('A', 150_000);
+        string giantRow2 = "ROW2_" + new string('B', 150_000);
+
+        string file1 = Path.Combine(_tempDir, "giant1.txt");
+        string file2 = Path.Combine(_tempDir, "giant2.txt");
+        string output = Path.Combine(_tempDir, "giant_merged.txt");
+
+        await File.WriteAllLinesAsync(file1, [giantHeader, giantRow1]);
+        await File.WriteAllLinesAsync(file2, [giantHeader, giantRow2]);
+
+        var options = new MergeOptions
+        {
+            OutputFilePath = output,
+            SkipHeaderOnSubsequentFiles = true,
+            HeaderLineCount = 1
+        };
+
+        MergeResult result = await _mergeService.MergeFilesAsync([file1, file2], options);
+
+        Assert.Equal(2, result.MergedFileCount);
+        Assert.Equal(3, result.TotalLinesWritten);
+        Assert.Equal(1, result.TotalHeaderLinesSkipped);
+
+        string[] mergedLines = await File.ReadAllLinesAsync(output);
+        Assert.Equal(3, mergedLines.Length);
+        Assert.Equal(giantHeader, mergedLines[0]);
+        Assert.Equal(giantRow1, mergedLines[1]);
+        Assert.Equal(giantRow2, mergedLines[2]);
+    }
+
+    [Fact]
+    public async Task MergeFilesAsync_FilesWithoutTrailingNewline_AppendsNewlineBetweenFiles()
+    {
+        string file1 = Path.Combine(_tempDir, "no_newline1.csv");
+        string file2 = Path.Combine(_tempDir, "no_newline2.csv");
+        string output = Path.Combine(_tempDir, "no_newline_merged.csv");
+
+        // 末尾に改行コード (\n) がないファイルを作成
+        await File.WriteAllTextAsync(file1, "ID,Name\n1,Alice");
+        await File.WriteAllTextAsync(file2, "ID,Name\n2,Bob");
+
+        var options = new MergeOptions
+        {
+            OutputFilePath = output,
+            SkipHeaderOnSubsequentFiles = true,
+            HeaderLineCount = 1
+        };
+
+        MergeResult result = await _mergeService.MergeFilesAsync([file1, file2], options);
+
+        Assert.Equal(3, result.TotalLinesWritten);
+        string[] lines = await File.ReadAllLinesAsync(output);
+        Assert.Equal(["ID,Name", "1,Alice", "2,Bob"], lines);
+    }
+
+    [Fact]
+    public void FileItem_FormatBytes_FormatsGigabytesCorrectly()
+    {
+        long onePointFiveGb = (long)(1.5 * 1024 * 1024 * 1024);
+        Assert.Equal("1.50 GB", FileItem.FormatBytes(onePointFiveGb));
+    }
+
     private sealed class CountingEncodingDetector : IEncodingDetector
     {
         public int CallCount { get; private set; }

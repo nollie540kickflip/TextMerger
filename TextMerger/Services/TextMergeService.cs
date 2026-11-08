@@ -1,13 +1,18 @@
+using System.Buffers;
 using System.Text;
 using TextMerger.Models;
 
 namespace TextMerger.Services;
 
 /// <summary>
-/// 複数のテキストファイルを指定された文字コード・ヘッダスキップ設定で結合するサービス
+/// 複数のテキストファイルを指定された文字コード・ヘッダスキップ設定で結合するサービス。
+/// ArrayPool&lt;char&gt; の固定長バッファによるチャンクストリーミングを行い、1GB超の大容量データでも定数メモリ O(1) で動作します。
 /// </summary>
 public sealed class TextMergeService : ITextMergeService
 {
+    private const int ChunkBufferSize = 65536;
+    private const long ProgressReportIntervalMs = 100;
+
     private readonly IEncodingDetector _encodingDetector;
 
     public TextMergeService(IEncodingDetector? encodingDetector = null)
@@ -77,6 +82,7 @@ public sealed class TextMergeService : ITextMergeService
 
         // 一時ファイルへ書き出してから最後に配置することで、途中キャンセルや例外時の破損を防ぐ
         string tempOutputPath = $"{fullOutputPath}.tmp.{Guid.NewGuid():N}";
+        char[] rentedBuffer = ArrayPool<char>.Shared.Rent(ChunkBufferSize);
 
         try
         {
@@ -85,10 +91,12 @@ public sealed class TextMergeService : ITextMergeService
                 FileMode.Create,
                 FileAccess.Write,
                 FileShare.None,
-                bufferSize: 65536,
-                useAsync: true))
-            await using (var writer = new StreamWriter(outputStream, outputEncoding, bufferSize: 65536))
+                bufferSize: ChunkBufferSize,
+                options: FileOptions.Asynchronous | FileOptions.SequentialScan))
+            await using (var writer = new StreamWriter(outputStream, outputEncoding, bufferSize: ChunkBufferSize))
             {
+                long lastProgressTick = Environment.TickCount64;
+
                 for (int fileIndex = 0; fileIndex < targetItems.Count; fileIndex++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -111,40 +119,105 @@ public sealed class TextMergeService : ITextMergeService
                         FileMode.Open,
                         FileAccess.Read,
                         FileShare.ReadWrite,
-                        bufferSize: 65536,
-                        useAsync: true);
+                        bufferSize: ChunkBufferSize,
+                        options: FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-                    // UTF-8やUTF-16のBOM付きファイルも適切に扱えるよう detectEncodingFromByteOrderMarks: true を指定
                     using var reader = new StreamReader(
                         inputStream,
                         fileInputEncoding,
                         detectEncodingFromByteOrderMarks: true,
-                        bufferSize: 65536);
+                        bufferSize: ChunkBufferSize);
 
                     int headersToSkip = (fileIndex > 0 && options.SkipHeaderOnSubsequentFiles)
                         ? options.HeaderLineCount
                         : 0;
 
-                    int currentLineIndex = 0;
+                    int skippedLines = 0;
+                    bool pendingCarriageReturn = false;
+                    bool hasWrittenAnyBodyChar = false;
+                    bool lastCharWasLineBreak = false;
+
                     while (true)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
-                        string? line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-                        if (line is null)
+                        int charsRead = await reader
+                            .ReadAsync(rentedBuffer.AsMemory(0, ChunkBufferSize), cancellationToken)
+                            .ConfigureAwait(false);
+
+                        if (charsRead == 0)
                         {
                             break;
                         }
 
-                        if (currentLineIndex < headersToSkip)
+                        int offset = 0;
+
+                        // 直前チャンク末尾が '\r' で、今回チャンク先頭が '\n' の場合は CRLF の後半として消費
+                        if (pendingCarriageReturn)
                         {
-                            currentLineIndex++;
-                            totalHeaderLinesSkipped++;
-                            continue;
+                            pendingCarriageReturn = false;
+                            if (rentedBuffer[0] == '\n')
+                            {
+                                offset = 1;
+                            }
                         }
 
-                        await writer.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
-                        currentLineIndex++;
+                        // 1. ヘッダ行の読み飛ばし（改行コード \r\n, \n, \r に対応）
+                        while (skippedLines < headersToSkip && offset < charsRead)
+                        {
+                            char c = rentedBuffer[offset++];
+                            if (c == '\r')
+                            {
+                                skippedLines++;
+                                totalHeaderLinesSkipped++;
+                                if (offset < charsRead)
+                                {
+                                    if (rentedBuffer[offset] == '\n')
+                                    {
+                                        offset++;
+                                    }
+                                }
+                                else
+                                {
+                                    pendingCarriageReturn = true;
+                                }
+                            }
+                            else if (c == '\n')
+                            {
+                                skippedLines++;
+                                totalHeaderLinesSkipped++;
+                            }
+                        }
+
+                        // 2. 本体データの固定長チャンク書き出し（string アロケーションなし）
+                        int bodyLength = charsRead - offset;
+                        if (bodyLength > 0)
+                        {
+                            hasWrittenAnyBodyChar = true;
+                            ReadOnlySpan<char> bodySpan = rentedBuffer.AsSpan(offset, bodyLength);
+                            totalLinesWritten += CountLineBreaks(bodySpan, ref pendingCarriageReturn, out lastCharWasLineBreak);
+
+                            await writer
+                                .WriteAsync(rentedBuffer.AsMemory(offset, bodyLength), cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+
+                        long nowTick = Environment.TickCount64;
+                        if (progress is not null && nowTick - lastProgressTick >= ProgressReportIntervalMs)
+                        {
+                            lastProgressTick = nowTick;
+                            progress.Report(new MergeProgress(
+                                ProcessedFiles: processedFiles,
+                                TotalFiles: targetItems.Count,
+                                CurrentFileName: fileName,
+                                WrittenLines: totalLinesWritten));
+                        }
+                    }
+
+                    // ファイル末尾に改行コードがない場合は改行を補完し、次ファイルの先頭行と連結されるのを防ぐ
+                    if (hasWrittenAnyBodyChar && !lastCharWasLineBreak)
+                    {
+                        await writer.WriteLineAsync().ConfigureAwait(false);
                         totalLinesWritten++;
                     }
 
@@ -163,6 +236,8 @@ public sealed class TextMergeService : ITextMergeService
         }
         finally
         {
+            ArrayPool<char>.Shared.Return(rentedBuffer);
+
             if (File.Exists(tempOutputPath))
             {
                 try
@@ -184,6 +259,46 @@ public sealed class TextMergeService : ITextMergeService
             OutputFilePath: fullOutputPath,
             OutputFileSize: outputFileInfo.Exists ? outputFileInfo.Length : 0L,
             EffectiveOutputEncoding: effectiveOutputEncodingType);
+    }
+
+    /// <summary>
+    /// チャンク内の改行数（\r\n, \n, \r）をカウントし、チャンク境界を跨ぐ \r\n と末尾改行状態を追跡します。
+    /// </summary>
+    private static long CountLineBreaks(
+        ReadOnlySpan<char> span,
+        ref bool pendingCarriageReturn,
+        out bool endedWithLineBreak)
+    {
+        long lines = 0;
+        int i = 0;
+
+        while (i < span.Length)
+        {
+            char c = span[i++];
+            if (c == '\r')
+            {
+                lines++;
+                if (i < span.Length)
+                {
+                    if (span[i] == '\n')
+                    {
+                        i++;
+                    }
+                }
+                else
+                {
+                    pendingCarriageReturn = true;
+                }
+            }
+            else if (c == '\n')
+            {
+                lines++;
+            }
+        }
+
+        char last = span[^1];
+        endedWithLineBreak = last is '\r' or '\n';
+        return lines;
     }
 
     private EncodingType ResolveFileInputEncodingType(MergeOptions options, FileItem item)
