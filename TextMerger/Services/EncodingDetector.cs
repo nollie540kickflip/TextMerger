@@ -328,10 +328,10 @@ public sealed class EncodingDetector : IEncodingDetector
                 byte b2 = bytes[i + 1];
                 if (b2 is >= 0xA1 and <= 0xFE)
                 {
-                    // ひらがな (0xA4)・カタカナ (0xA5) は EUC-JP 特有の頻出バイト
-                    if (b1 is 0xA4 or 0xA5 or >= 0xB0 and <= 0xF4)
+                    // ひらがな (0xA4)・カタカナ (0xA5)・第一水準漢字は EUC-JP 特有の頻出バイト
+                    if (b1 is 0xA4 or 0xA5 or (>= 0xB0 and <= 0xF4))
                     {
-                        score += 3;
+                        score += 4;
                     }
                     else
                     {
@@ -355,7 +355,7 @@ public sealed class EncodingDetector : IEncodingDetector
                 byte b2 = bytes[i + 1];
                 if (b2 is >= 0xA1 and <= 0xDF)
                 {
-                    score += 2;
+                    score += 3;
                     i += 2;
                     continue;
                 }
@@ -375,7 +375,7 @@ public sealed class EncodingDetector : IEncodingDetector
                 byte b3 = bytes[i + 2];
                 if (b2 is >= 0xA1 and <= 0xFE && b3 is >= 0xA1 and <= 0xFE)
                 {
-                    score += 3;
+                    score += 5;
                     i += 3;
                     continue;
                 }

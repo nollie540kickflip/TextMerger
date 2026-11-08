@@ -402,6 +402,76 @@ public sealed class TextMergeServiceTests : IDisposable
         Assert.Equal(["ID,Name", "1,Alice", "2,Bob"], lines);
     }
 
+    [Fact]
+    public async Task MergeFilesAsync_ReportsProgressAndHandlesCrLfAndValidationGuards()
+    {
+        string file1 = Path.Combine(_tempDir, "crlf1.csv");
+        string file2 = Path.Combine(_tempDir, "crlf2.csv");
+        string output = Path.Combine(_tempDir, "sub_out", "crlf_merged.csv");
+
+        await File.WriteAllTextAsync(file1, "H1\r\nRow1\r\n");
+        await File.WriteAllTextAsync(file2, "H1\rRow2\r");
+
+        var reports = new List<MergeProgress>();
+        var progress = new SynchronousProgress<MergeProgress>(p => reports.Add(p));
+
+        MergeResult result = await _mergeService.MergeFilesAsync(
+            [file1, file2],
+            new MergeOptions
+            {
+                OutputFilePath = output,
+                InputEncoding = EncodingType.Utf8NoBom,
+                OutputEncoding = EncodingType.Auto,
+                SkipHeaderOnSubsequentFiles = true,
+                HeaderLineCount = 1
+            },
+            progress);
+
+        Assert.NotEmpty(reports);
+        Assert.Equal(2, reports[^1].ProcessedFiles);
+        Assert.Equal(2, reports[^1].TotalFiles);
+        Assert.Equal("crlf2.csv", reports[^1].CurrentFileName);
+        Assert.Equal(3, reports[^1].WrittenLines);
+        Assert.True(result.OutputFileSize > 0);
+        Assert.Equal(Path.GetFullPath(output), result.OutputFilePath);
+
+        // バリデーション例外の検証
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _mergeService.MergeFilesAsync([file1], new MergeOptions { OutputFilePath = "   " }));
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            _mergeService.MergeFilesAsync([file1], new MergeOptions { OutputFilePath = output, HeaderLineCount = -1 }));
+    }
+
+    [Fact]
+    public async Task Program_Main_CliMode_ExecutesAndReturnsExpectedExitCodes()
+    {
+        string file1 = Path.Combine(_tempDir, "cli1.csv");
+        string file2 = Path.Combine(_tempDir, "cli2.csv");
+        string output = Path.Combine(_tempDir, "cli_out.csv");
+
+        await File.WriteAllLinesAsync(file1, ["Col1,Col2", "A,1"]);
+        await File.WriteAllLinesAsync(file2, ["Col1,Col2", "B,2"]);
+
+        // 正常実行
+        int exitCodeOk = await Program.Main(["--cli", _tempDir, output, "*.csv", "1"]);
+        Assert.Equal(0, exitCodeOk);
+        Assert.True(File.Exists(output));
+
+        // 引数不足
+        int exitCodeInvalidArgs = await Program.Main(["--cli", _tempDir]);
+        Assert.Equal(1, exitCodeInvalidArgs);
+
+        // 対象ファイルなし
+        int exitCodeNoFiles = await Program.Main(["--cli", _tempDir, output, "*.nonexistent", "1"]);
+        Assert.Equal(1, exitCodeNoFiles);
+    }
+
+    private sealed class SynchronousProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
+    }
+
     private sealed class CountingEncodingDetector : IEncodingDetector
     {
         public int CallCount { get; private set; }

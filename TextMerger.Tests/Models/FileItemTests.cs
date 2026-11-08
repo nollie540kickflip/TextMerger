@@ -13,5 +13,17 @@ public sealed class FileItemTests
 
         long onePointFiveGb = (long)(1.5 * 1024 * 1024 * 1024);
         Assert.Equal("1.50 GB", FileItem.FormatBytes(onePointFiveGb));
+
+        var item = new FileItem
+        {
+            FullPath = "/tmp/test.csv",
+            RelativePath = "test.csv",
+            Length = 2048,
+            DetectedEncoding = EncodingType.ShiftJis
+        };
+
+        Assert.Equal("2.0 KB", item.FormattedSize);
+        Assert.Contains("test.csv", item.ToString());
+        Assert.Contains("Shift_JIS", item.ToString());
     }
 }

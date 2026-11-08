@@ -75,5 +75,9 @@ public sealed class FileScannerTests : IDisposable
 
         Assert.Empty(scanResult.Files);
         Assert.NotEmpty(scanResult.Warnings);
+
+        Assert.Empty(_fileScanner.ScanFiles("", "*.txt", includeSubdirectories: false));
+        Assert.Equal(["*.*"], FileScanner.ParsePatterns(""));
+        Assert.Equal(["*.*"], FileScanner.ParsePatterns(" ; , "));
     }
 }
