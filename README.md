@@ -18,6 +18,58 @@ C# (`.NET 10`) と **Terminal.Gui v2 (`2.5.0`)** で作成した、テキスト�
   - 初期テーマとして落ち着いた `Dark` テーマと丸角枠線（`LineStyle.Rounded`）を適用。
   - 画面上部から `Dark` / `Light` / `Default` / `TurboPascal 5` / `Anders` / `Green Phosphor` の6種類の組み込みテーマをリアルタイムに切り替えられます。
 
+## ビルド方法
+
+### 前提条件
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) がインストールされていること
+
+### 1. 開発用ビルド（通常ビルド）
+ローカルの `.NET 10` ランタイムを利用してビルドします。
+
+```bash
+# Debug ビルド（開発・デバッグ時）
+dotnet build
+
+# Release ビルド（最適化あり）
+dotnet build -c Release
+```
+
+### 2. OS・環境別の配布用ビルド（単一実行バイナリ出力）
+配布先のマシンに `.NET 10` ランタイムがインストールされていなくても単体で動作する、OS・CPUアーキテクチャ別の単一実行ファイル（Self-Contained Single-File）を生成できます。
+
+#### macOS
+```bash
+# Apple Silicon (M1 / M2 / M3 / M4 - ARM64)
+dotnet publish TextMerger -c Release -r osx-arm64 --self-contained true -p:PublishSingleFile=true
+
+# Intel Mac (x64)
+dotnet publish TextMerger -c Release -r osx-x64 --self-contained true -p:PublishSingleFile=true
+```
+- 出力先: `TextMerger/bin/Release/net10.0/<RID>/publish/TextMerger`
+
+#### Windows
+```bash
+# Windows (64-bit / x64)
+dotnet publish TextMerger -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+
+# Windows (ARM64)
+dotnet publish TextMerger -c Release -r win-arm64 --self-contained true -p:PublishSingleFile=true
+```
+- 出力先: `TextMerger/bin/Release/net10.0/<RID>/publish/TextMerger.exe`
+
+#### Linux
+```bash
+# Linux (x64 / Ubuntu, Debian, RHEL 等)
+dotnet publish TextMerger -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true
+
+# Linux (ARM64 / AWS Graviton, Raspberry Pi 64-bit 等)
+dotnet publish TextMerger -c Release -r linux-arm64 --self-contained true -p:PublishSingleFile=true
+```
+- 出力先: `TextMerger/bin/Release/net10.0/<RID>/publish/TextMerger`
+
+> [!TIP]
+> 配布先に `.NET 10` ランタイムがインストール済みで、バイナリサイズを小さく抑えたい場合は `--self-contained false` に変更してください。
+
 ## 起動方法
 
 ### TUI モード（対話画面）
