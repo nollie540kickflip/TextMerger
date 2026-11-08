@@ -3,31 +3,6 @@ using TextMerger.Models;
 namespace TextMerger.Services;
 
 /// <summary>
-/// ファイルスキャン結果（一致ファイル一覧およびスキップ時の警告メッセージ）
-/// </summary>
-public sealed record FileScanResult(
-    IReadOnlyList<FileItem> Files,
-    IReadOnlyList<string> Warnings);
-
-/// <summary>
-/// 指定フォルダ内の対象ファイルを検索するサービスのインターフェース
-/// </summary>
-public interface IFileScanner
-{
-    IReadOnlyList<FileItem> ScanFiles(
-        string directoryPath,
-        string searchPatterns,
-        bool includeSubdirectories,
-        string? excludeFilePath = null);
-
-    FileScanResult ScanFilesWithWarnings(
-        string directoryPath,
-        string searchPatterns,
-        bool includeSubdirectories,
-        string? excludeFilePath = null);
-}
-
-/// <summary>
 /// 指定フォルダ内の対象ファイルをワイルドカードパターンで検索するサービス
 /// </summary>
 public sealed class FileScanner : IFileScanner

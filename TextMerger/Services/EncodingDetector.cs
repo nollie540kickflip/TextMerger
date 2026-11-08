@@ -3,14 +3,6 @@ using TextMerger.Models;
 namespace TextMerger.Services;
 
 /// <summary>
-/// ファイルの文字コードを自動判別するサービスのインターフェース
-/// </summary>
-public interface IEncodingDetector
-{
-    EncodingType DetectFileEncoding(string filePath);
-}
-
-/// <summary>
 /// テキストファイルのバイト列から文字コード（BOM有無・UTF-8・Shift_JIS・EUC-JP・UTF-16）を自動判別するクラス
 /// </summary>
 public sealed class EncodingDetector : IEncodingDetector
