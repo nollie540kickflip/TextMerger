@@ -11,22 +11,16 @@ public interface IEncodingDetector
 }
 
 /// <summary>
-/// DI・モック差し替えに対応した文字コード判別サービスの実装
-/// </summary>
-public sealed class FileEncodingDetector : IEncodingDetector
-{
-    public static FileEncodingDetector Default { get; } = new();
-
-    public EncodingType DetectFileEncoding(string filePath) =>
-        EncodingDetector.DetectFileEncoding(filePath);
-}
-
-/// <summary>
 /// テキストファイルのバイト列から文字コード（BOM有無・UTF-8・Shift_JIS・EUC-JP・UTF-16）を自動判別するクラス
 /// </summary>
-public static class EncodingDetector
+public sealed class EncodingDetector : IEncodingDetector
 {
     private const int MaxSampleBytes = 65536;
+
+    public static EncodingDetector Default { get; } = new();
+
+    EncodingType IEncodingDetector.DetectFileEncoding(string filePath) =>
+        DetectFileEncoding(filePath);
 
     /// <summary>
     /// 指定されたファイルパスの文字コードを自動判別します。

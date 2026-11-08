@@ -36,7 +36,7 @@ public sealed class FileScanner : IFileScanner
 
     public FileScanner(IEncodingDetector? encodingDetector = null)
     {
-        _encodingDetector = encodingDetector ?? FileEncodingDetector.Default;
+        _encodingDetector = encodingDetector ?? EncodingDetector.Default;
     }
 
     /// <summary>

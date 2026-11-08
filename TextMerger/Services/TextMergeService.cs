@@ -30,7 +30,7 @@ public sealed class TextMergeService : ITextMergeService
 
     public TextMergeService(IEncodingDetector? encodingDetector = null)
     {
-        _encodingDetector = encodingDetector ?? FileEncodingDetector.Default;
+        _encodingDetector = encodingDetector ?? EncodingDetector.Default;
     }
 
     public Task<MergeResult> MergeFilesAsync(
