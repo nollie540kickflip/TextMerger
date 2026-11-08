@@ -3,20 +3,6 @@ using System.Text;
 namespace TextMerger.Models;
 
 /// <summary>
-/// 入出力で選択可能な文字コード種別
-/// </summary>
-public enum EncodingType
-{
-    Auto,
-    Utf8NoBom,
-    Utf8WithBom,
-    ShiftJis,
-    EucJp,
-    Utf16Le,
-    Utf16Be
-}
-
-/// <summary>
 /// 文字コード選択肢の表示名と Encoding インスタンス生成を提供するヘルパー
 /// </summary>
 public sealed record EncodingOption(EncodingType Type, string DisplayName)
