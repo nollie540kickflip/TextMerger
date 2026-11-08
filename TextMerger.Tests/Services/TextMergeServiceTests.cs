@@ -1,20 +1,13 @@
 using System.Text;
-using Terminal.Gui.App;
-using Terminal.Gui.Configuration;
-using Terminal.Gui.Drawing;
-using Terminal.Gui.Drivers;
-using Terminal.Gui.Views;
 using TextMerger.Models;
 using TextMerger.Services;
-using TextMerger.UI;
 
-namespace TextMerger.Tests;
+namespace TextMerger.Tests.Services;
 
 public sealed class TextMergeServiceTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly TextMergeService _mergeService = new();
-    private readonly FileScanner _fileScanner = new();
 
     public TextMergeServiceTests()
     {
@@ -162,7 +155,6 @@ public sealed class TextMergeServiceTests : IDisposable
         await _mergeService.MergeFilesAsync([file1, file2], options);
 
         byte[] rawBytes = await File.ReadAllBytesAsync(output);
-        // UTF-8 BOM (EF BB BF) が先頭に付与されていることを確認
         Assert.True(rawBytes.Length >= 3);
         Assert.Equal(0xEF, rawBytes[0]);
         Assert.Equal(0xBB, rawBytes[1]);
@@ -207,66 +199,6 @@ public sealed class TextMergeServiceTests : IDisposable
     }
 
     [Fact]
-    public void FileScanner_ScanFiles_FiltersByMultiplePatternsAndSubdirectoryOption()
-    {
-        string subDir = Path.Combine(_tempDir, "sub");
-        Directory.CreateDirectory(subDir);
-
-        string txt1 = Path.Combine(_tempDir, "01.txt");
-        string csv1 = Path.Combine(_tempDir, "02.csv");
-        string log1 = Path.Combine(_tempDir, "03.log");
-        string subTxt = Path.Combine(subDir, "04.txt");
-        string output = Path.Combine(_tempDir, "merged.txt");
-
-        File.WriteAllText(txt1, "a");
-        File.WriteAllText(csv1, "b");
-        File.WriteAllText(log1, "c");
-        File.WriteAllText(subTxt, "d");
-        File.WriteAllText(output, "existing output");
-
-        // サブフォルダなし・出力ファイル除外
-        IReadOnlyList<FileItem> topOnly = _fileScanner.ScanFiles(
-            _tempDir,
-            "*.txt;*.csv",
-            includeSubdirectories: false,
-            excludeFilePath: output);
-
-        Assert.Equal(["01.txt", "02.csv"], topOnly.Select(f => f.RelativePath).ToArray());
-
-        // サブフォルダあり
-        IReadOnlyList<FileItem> withSub = _fileScanner.ScanFiles(
-            _tempDir,
-            "*.txt;*.csv",
-            includeSubdirectories: true,
-            excludeFilePath: output);
-
-        Assert.Equal(3, withSub.Count);
-        Assert.Contains(withSub, f => f.RelativePath == Path.Combine("sub", "04.txt"));
-    }
-
-    [Fact]
-    public void MainWindow_InitializeWithAnsiDriver_ConstructsAndLaysOutWithoutError()
-    {
-        using IApplication app = Application.Create().Init(DriverRegistry.Names.ANSI);
-        using var window = new MainWindow(app);
-        window.BeginInit();
-        window.EndInit();
-        window.Layout();
-
-        Assert.Equal(4, window.SubViews.Count);
-        Assert.Equal(MainWindow.DefaultThemeName, ThemeManager.GetCurrentThemeName());
-        Assert.Equal(LineStyle.Rounded, window.BorderStyle);
-
-        foreach (string theme in MainWindow.AvailableThemes)
-        {
-            window.ApplyTheme(theme);
-            Assert.Equal(theme, ThemeManager.GetCurrentThemeName());
-            Assert.Equal(LineStyle.Rounded, window.BorderStyle);
-            Assert.All(window.SubViews.OfType<FrameView>(), frame => Assert.Equal(LineStyle.Rounded, frame.BorderStyle));
-        }
-    }
-
-    [Fact]
     public async Task MergeFilesAsync_DefaultAutoEncoding_PreservesOriginalShiftJisEncoding()
     {
         Encoding sjis = EncodingOption.GetEncoding(EncodingType.ShiftJis);
@@ -277,7 +209,6 @@ public sealed class TextMergeServiceTests : IDisposable
         await File.WriteAllLinesAsync(file1, ["社員番号,氏名,部署", "101,鈴木一郎,総務部"], sjis);
         await File.WriteAllLinesAsync(file2, ["社員番号,氏名,部署", "102,高橋花子,人事部"], sjis);
 
-        // InputEncoding / OutputEncoding を指定せずデフォルト (Auto) のまま実行
         var options = new MergeOptions
         {
             OutputFilePath = output,
@@ -414,19 +345,8 @@ public sealed class TextMergeServiceTests : IDisposable
     }
 
     [Fact]
-    public void FileScanner_ScanFilesWithWarnings_ReturnsWarningWhenDirectoryDoesNotExist()
-    {
-        string nonExistent = Path.Combine(_tempDir, "does_not_exist");
-        FileScanResult scanResult = _fileScanner.ScanFilesWithWarnings(nonExistent, "*.txt", includeSubdirectories: false);
-
-        Assert.Empty(scanResult.Files);
-        Assert.NotEmpty(scanResult.Warnings);
-    }
-
-    [Fact]
     public async Task MergeFilesAsync_LargeLinesSpanningMultipleChunks_StreamsWithoutDataLoss()
     {
-        // 64KB (65536 chars) のチャンクサイズを大きく超える1行データ (150,000文字)
         string giantHeader = "HEADER_" + new string('H', 150_000);
         string giantRow1 = "ROW1_" + new string('A', 150_000);
         string giantRow2 = "ROW2_" + new string('B', 150_000);
@@ -465,7 +385,6 @@ public sealed class TextMergeServiceTests : IDisposable
         string file2 = Path.Combine(_tempDir, "no_newline2.csv");
         string output = Path.Combine(_tempDir, "no_newline_merged.csv");
 
-        // 末尾に改行コード (\n) がないファイルを作成
         await File.WriteAllTextAsync(file1, "ID,Name\n1,Alice");
         await File.WriteAllTextAsync(file2, "ID,Name\n2,Bob");
 
@@ -481,13 +400,6 @@ public sealed class TextMergeServiceTests : IDisposable
         Assert.Equal(3, result.TotalLinesWritten);
         string[] lines = await File.ReadAllLinesAsync(output);
         Assert.Equal(["ID,Name", "1,Alice", "2,Bob"], lines);
-    }
-
-    [Fact]
-    public void FileItem_FormatBytes_FormatsGigabytesCorrectly()
-    {
-        long onePointFiveGb = (long)(1.5 * 1024 * 1024 * 1024);
-        Assert.Equal("1.50 GB", FileItem.FormatBytes(onePointFiveGb));
     }
 
     private sealed class CountingEncodingDetector : IEncodingDetector
