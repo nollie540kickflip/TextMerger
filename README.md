@@ -36,3 +36,10 @@ dotnet run --project TextMerger -- --cli ./samples ./merged.csv "*.csv" 1
 ```bash
 dotnet test
 ```
+
+## 詳細ドキュメント
+- [機能仕様・エッジケース仕様書 (`docs/SPECIFICATION.md`)](./docs/SPECIFICATION.md)
+  - 入出力文字コード決定マトリクス、ヘッダ行スキップ・末尾改行補完のエッジケース仕様、TUIキー操作・CLI引数仕様
+- [アーキテクチャ・内部設計書 (`docs/ARCHITECTURE.md`)](./docs/ARCHITECTURE.md)
+  - ディレクトリ構造・レイヤー責務、デザインパターン（Mediator + Passive View）、1GB超対応の `ArrayPool<char>` 定数メモリ結合アルゴリズム、文字コード自動判別ロジック
+
